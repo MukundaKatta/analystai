@@ -111,16 +111,42 @@ export default function Home() {
   };
 
   const runCellAnalysis = async (docId: string, qId: string) => {
+    const doc = documents.find((d) => d.id === docId);
+    const question = questions.find((q) => q.id === qId);
+    if (!doc || !question) return;
+
     setMatrix((prev) => ({
       ...prev,
       [docId]: { ...(prev[docId] || {}), [qId]: { answer: "", citation: "", confidence: 0, status: "loading" } },
     }));
-    setTimeout(() => {
+
+    try {
+      const res = await fetch("/api/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document: doc.name, question: question.question }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Analysis failed");
       setMatrix((prev) => ({
         ...prev,
-        [docId]: { ...(prev[docId] || {}), [qId]: { answer: "AI-generated answer", citation: "Source document", confidence: 0.85, status: "filled" } },
+        [docId]: {
+          ...(prev[docId] || {}),
+          [qId]: {
+            answer: data.answer || "",
+            citation: data.citation || "",
+            confidence: data.confidence ?? 0.75,
+            status: "filled",
+          },
+        },
       }));
-    }, 1500);
+    } catch {
+      setMatrix((prev) => ({
+        ...prev,
+        [docId]: { ...(prev[docId] || {}), [qId]: { answer: "", citation: "", confidence: 0, status: "error" } },
+      }));
+      toast.error("Analysis failed");
+    }
   };
 
   const getCellData = (docId: string, qId: string): CellData => {
